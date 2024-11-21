@@ -16,3 +16,4 @@ include_directories(include)
 # ######################################################################################################################
 
 add_subdirectory(config)
+add_subdirectory(utils)
