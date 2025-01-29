@@ -210,7 +210,7 @@ Error CNI::AddNetworkList(const NetworkConfigList& net, const RuntimeConf& rt, R
 
         return ErrorEnum::eNone;
     } catch (const std::exception& e) {
-        return Error(ErrorEnum::eFailed, e.what());
+        return common::utils::ToAosError(e);
     }
 }
 
