@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - develop
+      - sonar_integration
 
   pull_request_target:
     types:
@@ -18,6 +19,7 @@ on:
       - develop
       - feature*
       - branch*
+      - sonar_integration
 
 jobs:
   build:
