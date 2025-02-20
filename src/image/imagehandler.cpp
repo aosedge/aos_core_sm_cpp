@@ -27,7 +27,7 @@ namespace {
  **********************************************************************************************************************/
 
 constexpr auto cSHA256Prefix        = "sha256:";
-constexpr auto cWhiteoutPrefix      = ".wh.";
+constexpr auto cWhiteoutPrefix      = std::string_view(".wh.");
 constexpr auto cWhiteoutOpaqueDir   = ".wh..wh..opq";
 constexpr auto cBlobsFolder         = "blobs";
 constexpr auto cLayerManifestFile   = "layer.json";
@@ -61,7 +61,7 @@ Error OCIWhiteoutsToOverlay(const String& path, uint32_t uid, uint32_t gid)
             }
 
             if (baseName.find(cWhiteoutPrefix) == 0) {
-                auto fullPath = std::filesystem::path(dirName) / baseName.substr(strlen(cWhiteoutPrefix));
+                auto fullPath = std::filesystem::path(dirName) / baseName.substr(cWhiteoutPrefix.size());
 
                 if (auto res = mknod(fullPath.c_str(), S_IFCHR, 0); res != 0) {
                     return AOS_ERROR_WRAP(res);
