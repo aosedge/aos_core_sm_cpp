@@ -179,13 +179,7 @@ Error CNI::SetConfDir(const String& configDir)
 {
     LOG_DBG() << "Set CNI configuration directory: configDir=" << configDir.CStr();
 
-    mConfigDir = std::filesystem::path(configDir.CStr()) / "results";
-
-    try {
-        std::filesystem::create_directories(mConfigDir);
-    } catch (const std::exception& e) {
-        return AOS_ERROR_WRAP(common::utils::ToAosError(e));
-    }
+    mConfigDir = configDir.CStr();
 
     return ErrorEnum::eNone;
 }
@@ -250,6 +244,9 @@ Error CNI::ValidateNetworkList(const NetworkConfigList& net)
 
 Error CNI::GetNetworkListCachedConfig(NetworkConfigList& net, RuntimeConf& rt)
 {
+    LOG_DBG() << "Get network list cached config" << Log::Field("name", net.mName)
+              << Log::Field("containerID", rt.mContainerID);
+
     try {
         auto cacheFilePath
             = std::filesystem::path(mConfigDir) / (net.mName.CStr() + std::string("-") + rt.mContainerID.CStr());
