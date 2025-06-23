@@ -39,18 +39,18 @@ Error JournalAlerts::Init(const config::JournalAlertsConfig& config, InstanceInf
         mAlertFilters.emplace_back(filter);
     }
 
-    try {
-        SetupJournal();
-    } catch (const std::exception& e) {
-        return AOS_ERROR_WRAP(common::utils::ToAosError(e));
-    }
-
     return ErrorEnum::eNone;
 }
 
 Error JournalAlerts::Start()
 {
     LOG_DBG() << "Start journal alerts";
+
+    try {
+        SetupJournal();
+    } catch (const std::exception& e) {
+        return AOS_ERROR_WRAP(common::utils::ToAosError(e));
+    }
 
     mStopped       = false;
     mMonitorThread = std::thread(&JournalAlerts::MonitorJournal, this);
@@ -97,11 +97,6 @@ Error JournalAlerts::Stop()
     return ErrorEnum::eNone;
 }
 
-JournalAlerts::~JournalAlerts()
-{
-    Stop();
-}
-
 std::shared_ptr<utils::JournalItf> JournalAlerts::CreateJournal()
 {
     return std::make_shared<utils::Journal>();
@@ -123,7 +118,7 @@ void JournalAlerts::SetupJournal()
     StaticString<cJournalCursorLen> cursor;
 
     auto err = mStorage->GetJournalCursor(cursor);
-    AOS_ERROR_CHECK_AND_THROW("get journal cursor failed", err);
+    AOS_ERROR_CHECK_AND_THROW(err, "get journal cursor failed");
 
     if (!cursor.IsEmpty()) {
         mJournal->SeekCursor(cursor.CStr());
@@ -157,7 +152,7 @@ void JournalAlerts::StoreCurrentCursor()
     }
 
     auto err = mStorage->SetJournalCursor(newCursor.c_str());
-    AOS_ERROR_CHECK_AND_THROW("set journal cursor failed", err)
+    AOS_ERROR_CHECK_AND_THROW(err, "set journal cursor failed");
 
     mCursor = newCursor;
 }
@@ -218,7 +213,7 @@ void JournalAlerts::ProcessJournal()
         if (unit.empty()) {
 
             // add prefix 'aos-service@' and postfix '.service'
-            // to service uuid and get proper seervice object from DB
+            // to service uuid and get proper service object from DB
             unit = entry.mSystemdCGroup;
         }
 
@@ -240,7 +235,7 @@ void JournalAlerts::RecoverJournalError()
 {
     try {
         auto err = mStorage->SetJournalCursor("");
-        AOS_ERROR_CHECK_AND_THROW("get journal cursor failed", err);
+        AOS_ERROR_CHECK_AND_THROW(err, "get journal cursor failed");
 
         mJournal.reset();
         SetupJournal();
@@ -269,7 +264,7 @@ std::optional<cloudprotocol::ServiceInstanceAlert> JournalAlerts::GetServiceInst
     if (unit.find(cAosServicePrefix) != std::string::npos) {
         auto instanceID          = ParseInstanceID(unit);
         auto [instanceInfo, err] = mInstanceInfoProvider->GetInstanceInfoByID(instanceID.c_str());
-        AOS_ERROR_CHECK_AND_THROW("can't get instance info for unit: " + unit, err);
+        AOS_ERROR_CHECK_AND_THROW(err, "can't get instance info for unit: " + unit);
 
         auto alert = cloudprotocol::ServiceInstanceAlert(entry.mRealTime);
 
@@ -321,7 +316,7 @@ std::string JournalAlerts::ParseInstanceID(const std::string& unit)
         return id;
     }
 
-    AOS_ERROR_THROW("bad instanceID", ErrorEnum::eFailed);
+    AOS_ERROR_THROW(ErrorEnum::eFailed, "bad instanceID");
 
     return "";
 }

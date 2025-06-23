@@ -24,16 +24,6 @@ namespace aos::sm::runner {
 
 namespace {
 
-inline unsigned ToSec(Duration duration)
-{
-    return duration / Time::cSeconds;
-}
-
-inline unsigned ToMSec(Duration duration)
-{
-    return duration / Time::cMilliseconds;
-}
-
 inline InstanceRunState ToInstanceState(UnitState state)
 {
     if (state.GetValue() == UnitStateEnum::eActive) {
@@ -72,18 +62,18 @@ Error Runner::Init(RunStatusReceiverItf& listener)
 {
     mRunStatusReceiver = &listener;
 
-    try {
-        mSystemd = CreateSystemdConn();
-    } catch (const std::exception& e) {
-        return AOS_ERROR_WRAP(common::utils::ToAosError(e));
-    }
-
     return ErrorEnum::eNone;
 }
 
 Error Runner::Start()
 {
     LOG_DBG() << "Start runner";
+
+    try {
+        mSystemd = CreateSystemdConn();
+    } catch (const std::exception& e) {
+        return AOS_ERROR_WRAP(common::utils::ToAosError(e));
+    }
 
     mClosed           = false;
     mMonitoringThread = std::thread(&Runner::MonitorUnits, this);
@@ -132,21 +122,20 @@ RunStatus Runner::StartInstance(const String& instanceID, const String& runtimeD
     // Fix run parameters.
     RunParameters fixedParams = params;
 
-    if (params.mStartInterval == 0) {
+    if (!params.mStartInterval.HasValue()) {
         fixedParams.mStartInterval = cDefaultStartInterval;
     }
 
-    if (params.mStartBurst == 0) {
+    if (!params.mStartBurst.HasValue()) {
         fixedParams.mStartBurst = cDefaultStartBurst;
     }
 
-    if (params.mRestartInterval == 0) {
+    if (!params.mRestartInterval.HasValue()) {
         fixedParams.mRestartInterval = cDefaultRestartInterval;
     }
 
-    LOG_DBG() << "Start service instance: instanceID=" << instanceID
-              << ", startInterval=" << ToSec(fixedParams.mStartInterval) << ", startBurst=" << fixedParams.mStartBurst
-              << ", restartInterval=" << ToSec(fixedParams.mRestartInterval);
+    LOG_DBG() << "Start service instance: instanceID=" << instanceID << ", startInterval=" << fixedParams.mStartInterval
+              << ", startBurst=" << fixedParams.mStartBurst << ", restartInterval=" << fixedParams.mRestartInterval;
 
     // Create systemd service file.
     const auto unitName = CreateSystemdUnitName(instanceID);
@@ -156,7 +145,7 @@ RunStatus Runner::StartInstance(const String& instanceID, const String& runtimeD
     }
 
     // Start unit.
-    const auto startTime = static_cast<Duration>(cStartTimeMultiplier * fixedParams.mStartInterval);
+    const auto startTime = static_cast<Duration>(cStartTimeMultiplier * fixedParams.mStartInterval.GetValue());
 
     if (status.mError = mSystemd->StartUnit(unitName, "replace", startTime); !status.mError.IsNone()) {
         return status;
@@ -241,7 +230,9 @@ void Runner::MonitorUnits()
             auto startUnitIt = mStartingUnits.find(unit.mName);
             if (startUnitIt != mStartingUnits.end()) {
                 startUnitIt->second.mRunState = unit.mActiveState;
-                // systemd doesnt change the state of failed unit => notify listener about final state.
+                startUnitIt->second.mExitCode = unit.mExitCode;
+
+                // systemd doesn't change the state of failed unit => notify listener about final state.
                 if (unit.mActiveState == UnitStateEnum::eFailed) {
                     startUnitIt->second.mCondVar.notify_all();
                 }
@@ -250,12 +241,12 @@ void Runner::MonitorUnits()
             // Update running units
             auto runUnitIt = mRunningUnits.find(unit.mName);
             if (runUnitIt != mRunningUnits.end()) {
-                auto& unitStatus    = runUnitIt->second;
+                auto& runningState  = runUnitIt->second;
                 auto  instanceState = ToInstanceState(unit.mActiveState);
 
-                if (unitStatus != instanceState) {
-                    unitStatus  = instanceState;
-                    unitChanged = true;
+                if (instanceState != runningState.mRunState || unit.mExitCode != runningState.mExitCode) {
+                    runningState = RunningUnitData {instanceState, unit.mExitCode};
+                    unitChanged  = true;
                 }
             }
         }
@@ -274,7 +265,9 @@ Array<RunStatus> Runner::GetRunningInstances() const
         mRunningUnits.begin(), mRunningUnits.end(), std::back_inserter(mRunningInstances), [](const auto& unit) {
             const auto instanceID = CreateInstanceID(unit.first);
 
-            return RunStatus {instanceID.c_str(), unit.second, Error()};
+            auto error = unit.second.mExitCode.HasValue() ? Error(unit.second.mExitCode.GetValue()) : Error();
+
+            return RunStatus {instanceID.c_str(), unit.second.mRunState, error};
         });
 
     return Array(mRunningInstances.data(), mRunningInstances.size());
@@ -288,13 +281,9 @@ Error Runner::SetRunParameters(const std::string& unitName, const RunParameters&
                                          "[Service]\n"
                                          "RestartSec=%us\n";
 
-    if (params.mStartInterval < aos::Time::cMicroseconds * 1
-        || params.mRestartInterval < aos::Time::cMicroseconds * 1) {
-        return AOS_ERROR_WRAP(ErrorEnum::eInvalidArgument);
-    }
-
-    std::string formattedContent = Poco::format(
-        parametersFormat, ToSec(params.mStartInterval), params.mStartBurst, ToSec(params.mRestartInterval));
+    std::string formattedContent
+        = Poco::format(parametersFormat, static_cast<uint32_t>(params.mStartInterval->Seconds()), *params.mStartBurst,
+            static_cast<uint32_t>(params.mRestartInterval->Seconds()));
 
     const std::string parametersDir = GetSystemdDropInsDir() + "/" + unitName + ".d";
 
@@ -304,41 +293,47 @@ Error Runner::SetRunParameters(const std::string& unitName, const RunParameters&
 
     const auto paramsFile = parametersDir + "/" + cParametersFileName;
 
-    return FS::WriteStringToFile(paramsFile.c_str(), formattedContent.c_str(), 0644U);
+    return fs::WriteStringToFile(paramsFile.c_str(), formattedContent.c_str(), 0644U);
 }
 
 Error Runner::RemoveRunParameters(const std::string& unitName)
 {
     const std::string parametersDir = GetSystemdDropInsDir() + "/" + unitName + ".d";
 
-    return FS::RemoveAll(parametersDir.c_str());
+    return fs::RemoveAll(parametersDir.c_str());
 }
 
 RetWithError<InstanceRunState> Runner::GetStartingUnitState(const std::string& unitName, Duration startInterval)
 {
-    const auto timeout = std::chrono::milliseconds(ToMSec(startInterval));
+    const auto timeout = std::chrono::milliseconds(startInterval.Milliseconds());
 
     auto [initialStatus, err] = mSystemd->GetUnitStatus(unitName);
     if (!err.IsNone()) {
-        return {InstanceRunStateEnum::eFailed, AOS_ERROR_WRAP(err)};
+        return {InstanceRunStateEnum::eFailed, AOS_ERROR_WRAP(Error(err, "failed to get unit status"))};
     }
 
     {
         std::unique_lock lock {mMutex};
 
         mStartingUnits[unitName].mRunState = initialStatus.mActiveState;
+        mStartingUnits[unitName].mExitCode = initialStatus.mExitCode;
 
         // Wait specified duration for unit state updates.
-        std::ignore        = mStartingUnits[unitName].mCondVar.wait_for(lock, timeout);
-        UnitState runState = mStartingUnits[unitName].mRunState;
+        std::ignore   = mStartingUnits[unitName].mCondVar.wait_for(lock, timeout);
+        auto runState = mStartingUnits[unitName].mRunState;
+        auto exitCode = mStartingUnits[unitName].mExitCode;
 
         mStartingUnits.erase(unitName);
 
         if (runState.GetValue() != UnitStateEnum::eActive) {
-            return {InstanceRunStateEnum::eFailed, AOS_ERROR_WRAP(ErrorEnum::eFailed)};
+
+            const auto errMsg = "failed to start unit";
+            err = exitCode.HasValue() ? Error(exitCode.GetValue(), errMsg) : Error(ErrorEnum::eFailed, errMsg);
+
+            return {InstanceRunStateEnum::eFailed, AOS_ERROR_WRAP(err)};
         }
 
-        mRunningUnits[unitName] = InstanceRunStateEnum::eActive;
+        mRunningUnits[unitName] = RunningUnitData {InstanceRunStateEnum::eActive, exitCode};
 
         return {InstanceRunStateEnum::eActive, ErrorEnum::eNone};
     }
@@ -357,7 +352,7 @@ std::string Runner::CreateInstanceID(const std::string& unitname)
     if (Poco::startsWith(unitname, prefix) && Poco::endsWith(unitname, suffix)) {
         return unitname.substr(prefix.length(), unitname.length() - prefix.length() - suffix.length());
     } else {
-        AOS_ERROR_THROW("not a valid Aos service name", AOS_ERROR_WRAP(Error(ErrorEnum::eInvalidArgument)));
+        AOS_ERROR_THROW(AOS_ERROR_WRAP(Error(ErrorEnum::eInvalidArgument)), "not a valid Aos service name");
     }
 }
 

@@ -290,7 +290,7 @@ RetWithError<uint64_t> ResourceUsageProvider::GetSystemDiskUsage(const String& p
 
 RetWithError<size_t> ResourceUsageProvider::GetInstanceCPUUsage(const String& instanceID)
 {
-    const auto cpuUsageFile = FS::JoinPath(cCgroupsPath, instanceID, cCpuUsageFile);
+    const auto cpuUsageFile = fs::JoinPath(cCgroupsPath, instanceID, cCpuUsageFile);
 
     std::ifstream file(cpuUsageFile.CStr());
     if (!file.is_open()) {
@@ -317,7 +317,7 @@ RetWithError<size_t> ResourceUsageProvider::GetInstanceCPUUsage(const String& in
 
 RetWithError<size_t> ResourceUsageProvider::GetInstanceRAMUsage(const String& instanceID)
 {
-    const auto memUsageFile = FS::JoinPath(cCgroupsPath, instanceID, cMemUsageFile);
+    const auto memUsageFile = fs::JoinPath(cCgroupsPath, instanceID, cMemUsageFile);
 
     std::ifstream file(memUsageFile.CStr());
     if (!file.is_open()) {
@@ -385,9 +385,8 @@ Error ResourceUsageProvider::SetInstanceMonitoringData(
         cachedInstanceMonitoring.mTotal = 0;
     }
 
-    const auto now = Time::Now();
-    const auto timeDeltaMicroseconds
-        = static_cast<double>(now.Sub(cachedInstanceMonitoring.mTimestamp) / Time::cMicroseconds);
+    const auto now                   = Time::Now();
+    const auto timeDeltaMicroseconds = static_cast<double>(now.Sub(cachedInstanceMonitoring.mTimestamp).Microseconds());
 
     if (timeDeltaMicroseconds > 0 && mCPUCount > 0) {
         monitoringData.mCPU = static_cast<double>(cpuUsage - cachedInstanceMonitoring.mTotal) * 100.0

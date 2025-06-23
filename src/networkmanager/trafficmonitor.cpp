@@ -47,8 +47,7 @@ std::vector<std::string> SplitFields(const std::string& str)
  * Public methods
  **********************************************************************************************************************/
 
-Error TrafficMonitor::Init(
-    StorageItf& storage, common::network::IPTablesItf& iptables, common::utils::Duration updatePeriod)
+Error TrafficMonitor::Init(StorageItf& storage, common::network::IPTablesItf& iptables, Duration updatePeriod)
 {
     LOG_DBG() << "Init traffic monitor";
 
@@ -82,8 +81,8 @@ Error TrafficMonitor::Start()
         mStop = false;
     }
 
-    return mTimer.Create(
-        std::chrono::duration_cast<std::chrono::nanoseconds>(mUpdatePeriod).count(),
+    return mTimer.Start(
+        mUpdatePeriod,
         [this](void*) {
             if (auto err = UpdateTrafficData(); err != ErrorEnum::eNone) {
                 LOG_ERR() << "Can't update traffic data: error=" << err;
@@ -495,6 +494,10 @@ Error TrafficMonitor::DeleteAllTrafficChains()
 
 Error TrafficMonitor::DeleteTrafficChain(const std::string& chain, const std::string& rootChain)
 {
+    if (chain.empty()) {
+        return ErrorEnum::eNone;
+    }
+
     {
         std::unique_lock lock {mMutex};
 

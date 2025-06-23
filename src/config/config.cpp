@@ -61,21 +61,16 @@ void ParseMonitoringConfig(const common::utils::CaseInsensitiveObjectWrapper& ob
         ? object.GetObject("monitoring").GetValue<std::string>("averageWindow", cDefaultMonitoringAverageWindow)
         : cDefaultMonitoringAverageWindow;
 
-    Error                   err = ErrorEnum::eNone;
-    common::utils::Duration duration;
+    Error err = ErrorEnum::eNone;
 
-    Tie(duration, err) = common::utils::ParseDuration(pollPeriod);
-    AOS_ERROR_CHECK_AND_THROW("error parsing pollPeriod tag", err);
+    Tie(config.mPollPeriod, err) = common::utils::ParseDuration(pollPeriod);
+    AOS_ERROR_CHECK_AND_THROW(err, "error parsing pollPeriod tag");
 
-    config.mPollPeriod = duration.count();
-
-    Tie(duration, err) = common::utils::ParseDuration(averageWindow);
-    AOS_ERROR_CHECK_AND_THROW("error parsing averageWindow tag", err);
-
-    config.mAverageWindow = duration.count();
+    Tie(config.mAverageWindow, err) = common::utils::ParseDuration(averageWindow);
+    AOS_ERROR_CHECK_AND_THROW(err, "error parsing averageWindow tag");
 }
 
-void ParseLoggingConfig(const common::utils::CaseInsensitiveObjectWrapper& object, LoggingConfig& config)
+void ParseLoggingConfig(const common::utils::CaseInsensitiveObjectWrapper& object, common::logprovider::Config& config)
 {
     config.mMaxPartSize  = object.GetValue<uint64_t>("maxPartSize", cloudprotocol::cLogContentLen);
     config.mMaxPartCount = object.GetValue<uint64_t>("maxPartCount", 80);
@@ -134,20 +129,18 @@ void ParseServiceManagerConfig(const common::utils::CaseInsensitiveObjectWrapper
 {
     config.mServicesDir = object.GetValue<std::string>("servicesDir", JoinPath(workingDir, "services")).c_str();
     config.mDownloadDir = object.GetValue<std::string>("downloadDir", JoinPath(workingDir, "downloads")).c_str();
+    config.mPartLimit   = object.GetValue<size_t>("servicesPartLimit", 0);
 
-    auto [ttl, err] = common::utils::ParseDuration(object.GetValue<std::string>("serviceTTL", cDefaultServiceTTLDays));
-    AOS_ERROR_CHECK_AND_THROW("error parsing serviceTTL tag", err);
+    Error err = ErrorEnum::eNone;
 
-    config.mTTL = ttl.count();
+    Tie(config.mTTL, err)
+        = common::utils::ParseDuration(object.GetValue<std::string>("serviceTTL", cDefaultServiceTTLDays));
+    AOS_ERROR_CHECK_AND_THROW(err, "error parsing serviceTTL tag");
 
     auto removeOutdatedPeriod = object.GetOptionalValue<std::string>("removeOutdatedPeriod");
     if (removeOutdatedPeriod.has_value()) {
-        common::utils::Duration period;
-
-        Tie(period, err) = common::utils::ParseDuration(removeOutdatedPeriod.value());
-        AOS_ERROR_CHECK_AND_THROW("error parsing removeOutdatedPeriod tag", err);
-
-        config.mRemoveOutdatedPeriod = period.count();
+        Tie(config.mRemoveOutdatedPeriod, err) = common::utils::ParseDuration(removeOutdatedPeriod.value());
+        AOS_ERROR_CHECK_AND_THROW(err, "error parsing removeOutdatedPeriod tag");
     }
 }
 
@@ -156,20 +149,18 @@ void ParseLayerManagerConfig(const common::utils::CaseInsensitiveObjectWrapper& 
 {
     config.mLayersDir   = object.GetValue<std::string>("layersDir", JoinPath(workingDir, "layers")).c_str();
     config.mDownloadDir = object.GetValue<std::string>("downloadDir", JoinPath(workingDir, "downloads")).c_str();
+    config.mPartLimit   = object.GetValue<size_t>("layersPartLimit", 0);
 
-    auto [ttl, err] = common::utils::ParseDuration(object.GetValue<std::string>("layerTTL", cDefaultLayerTTLDays));
-    AOS_ERROR_CHECK_AND_THROW("error parsing layerTTL tag", err);
+    Error err = ErrorEnum::eNone;
 
-    config.mTTL = ttl.count();
+    Tie(config.mTTL, err)
+        = common::utils::ParseDuration(object.GetValue<std::string>("layerTTL", cDefaultLayerTTLDays));
+    AOS_ERROR_CHECK_AND_THROW(err, "error parsing layerTTL tag");
 
     auto removeOutdatedPeriod = object.GetOptionalValue<std::string>("removeOutdatedPeriod");
     if (removeOutdatedPeriod.has_value()) {
-        common::utils::Duration period;
-
-        Tie(period, err) = common::utils::ParseDuration(removeOutdatedPeriod.value());
-        AOS_ERROR_CHECK_AND_THROW("error parsing removeOutdatedPeriod tag", err);
-
-        config.mRemoveOutdatedPeriod = period.count();
+        Tie(config.mRemoveOutdatedPeriod, err) = common::utils::ParseDuration(removeOutdatedPeriod.value());
+        AOS_ERROR_CHECK_AND_THROW(err, "error parsing removeOutdatedPeriod tag");
     }
 }
 
@@ -184,22 +175,22 @@ void ParseLauncherConfig(const common::utils::CaseInsensitiveObjectWrapper& obje
 
     for (const auto& hostBind : hostBinds) {
         auto err = config.mHostBinds.EmplaceBack(hostBind.c_str());
-        AOS_ERROR_CHECK_AND_THROW("error parsing hostBinds tag", err);
+        AOS_ERROR_CHECK_AND_THROW(err, "error parsing hostBinds tag");
     }
 
     const auto hosts = common::utils::GetArrayValue<Host>(object, "hosts",
         [](const auto& val) { return ParseHostConfig(common::utils::CaseInsensitiveObjectWrapper(val)); });
     for (const auto& host : hosts) {
         auto err = config.mHosts.EmplaceBack(host);
-        AOS_ERROR_CHECK_AND_THROW("error parsing hosts tag", err);
+        AOS_ERROR_CHECK_AND_THROW(err, "error parsing hosts tag");
     }
 
     auto removeOutdatedPeriod = object.GetOptionalValue<std::string>("removeOutdatedPeriod");
     if (removeOutdatedPeriod.has_value()) {
-        auto [period, err] = common::utils::ParseDuration(removeOutdatedPeriod.value());
-        AOS_ERROR_CHECK_AND_THROW("error parsing removeOutdatedPeriod tag", err);
+        Error err = ErrorEnum::eNone;
 
-        config.mRemoveOutdatedPeriod = period.count();
+        Tie(config.mRemoveOutdatedPeriod, err) = common::utils::ParseDuration(removeOutdatedPeriod.value());
+        AOS_ERROR_CHECK_AND_THROW(err, "error parsing removeOutdatedPeriod tag");
     }
 }
 
@@ -212,7 +203,7 @@ void ParseSMClientConfig(const common::utils::CaseInsensitiveObjectWrapper& obje
 
     Tie(config.mCMReconnectTimeout, err)
         = common::utils::ParseDuration(object.GetValue<std::string>("cmReconnectTimeout", cDefaultCMReconnectTimeout));
-    AOS_ERROR_CHECK_AND_THROW("error parsing cmReconnectTimeout tag", err);
+    AOS_ERROR_CHECK_AND_THROW(err, "error parsing cmReconnectTimeout tag");
 };
 
 } // namespace
@@ -254,25 +245,14 @@ Error ParseConfig(const std::string& filename, Config& config)
 
         ParseMonitoringConfig(object, config.mMonitoring);
 
-        auto empty = common::utils::CaseInsensitiveObjectWrapper(Poco::makeShared<Poco::JSON::Object>());
+        auto empty         = common::utils::CaseInsensitiveObjectWrapper(Poco::makeShared<Poco::JSON::Object>());
+        auto logging       = object.Has("logging") ? object.GetObject("logging") : empty;
+        auto journalAlerts = object.Has("journalAlerts") ? object.GetObject("journalAlerts") : empty;
+        auto migration     = object.Has("migration") ? object.GetObject("migration") : empty;
 
-        if (object.Has("logging")) {
-            ParseLoggingConfig(object.GetObject("logging"), config.mLogging);
-        } else {
-            ParseLoggingConfig(empty, config.mLogging);
-        }
-
-        if (object.Has("journalAlerts")) {
-            ParseJournalAlertsConfig(object.GetObject("journalAlerts"), config.mJournalAlerts);
-        } else {
-            ParseJournalAlertsConfig(empty, config.mJournalAlerts);
-        }
-
-        if (object.Has("migration")) {
-            ParseMigrationConfig(object.GetObject("migration"), config.mWorkingDir, config.mMigration);
-        } else {
-            ParseMigrationConfig(empty, config.mWorkingDir, config.mMigration);
-        }
+        ParseLoggingConfig(logging, config.mLogging);
+        ParseJournalAlertsConfig(journalAlerts, config.mJournalAlerts);
+        ParseMigrationConfig(migration, config.mWorkingDir, config.mMigration);
     } catch (const std::exception& e) {
         return common::utils::ToAosError(e);
     }

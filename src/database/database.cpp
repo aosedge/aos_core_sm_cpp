@@ -41,8 +41,8 @@ Poco::Data::BLOB ToBlob(const String& str)
 
 Time ConvertTimestamp(uint64_t timestamp)
 {
-    const auto seconds = static_cast<int64_t>(timestamp / Time::cSeconds);
-    const auto nanos   = static_cast<int64_t>(timestamp % Time::cSeconds);
+    const auto seconds = timestamp / Time::cSeconds.Nanoseconds();
+    const auto nanos   = static_cast<int64_t>(timestamp % Time::cSeconds.Nanoseconds());
 
     return Time::Unix(seconds, nanos);
 }
@@ -141,7 +141,7 @@ void ConvertEnvVarsInfoFromJSON(
 
     for (auto& envVar : envVars) {
         auto err = result.mVariables.PushBack(Move(envVar));
-        AOS_ERROR_CHECK_AND_THROW("DB instance's envVar count exceeds application limit", err);
+        AOS_ERROR_CHECK_AND_THROW(err, "DB instance's envVar count exceeds application limit");
     }
 }
 
@@ -177,7 +177,7 @@ Error ConvertEnvVarsInstanceInfoArrayFromJSON(
             ConvertEnvVarsInfoFromJSON(common::utils::CaseInsensitiveObjectWrapper(objectPtr), *envVarsInfo);
 
             err = envVarsInstanceInfos.PushBack(*envVarsInfo);
-            AOS_ERROR_CHECK_AND_THROW("DB instance's envvars count exceeds application limit", err);
+            AOS_ERROR_CHECK_AND_THROW(err, "DB instance's envvars count exceeds application limit");
         }
     } catch (const std::exception& e) {
         return AOS_ERROR_WRAP(common::utils::ToAosError(e));
@@ -261,7 +261,7 @@ public:
 
         const auto ptr = parser.parse(networkJson.value()).extract<Poco::JSON::Object::Ptr>();
         if (ptr == nullptr) {
-            AOS_ERROR_CHECK_AND_THROW("failed to parse network json", AOS_ERROR_WRAP(ErrorEnum::eFailed));
+            AOS_ERROR_CHECK_AND_THROW(AOS_ERROR_WRAP(ErrorEnum::eFailed), "failed to parse network json");
         }
 
         ConvertNetworkParametersFromJSON(*ptr, result.mInstanceInfo.mNetworkParameters);
@@ -864,6 +864,64 @@ Error Database::RemoveTrafficMonitorData(const String& chain)
             return AOS_ERROR_WRAP(ErrorEnum::eNotFound);
         }
     } catch (const std::exception& e) {
+        return AOS_ERROR_WRAP(common::utils::ToAosError(e));
+    }
+
+    return ErrorEnum::eNone;
+}
+
+Error Database::AddInstanceNetworkInfo(const sm::networkmanager::InstanceNetworkInfo& info)
+{
+    LOG_DBG() << "Add instance network info" << Log::Field("instanceID", info.mInstanceID)
+              << Log::Field("networkID", info.mNetworkID);
+
+    try {
+        *mSession << "INSERT INTO instancenetwork (instanceID, networkID) VALUES (?, ?);",
+            bind(info.mInstanceID.CStr()), bind(info.mNetworkID.CStr()), now;
+    } catch (const std::exception& e) {
+        return AOS_ERROR_WRAP(common::utils::ToAosError(e));
+    }
+
+    return ErrorEnum::eNone;
+}
+
+Error Database::RemoveInstanceNetworkInfo(const String& instanceID)
+{
+    LOG_DBG() << "Remove instance network info" << Log::Field("instanceID", instanceID);
+
+    try {
+        Poco::Data::Statement statement {*mSession};
+
+        statement << "DELETE FROM instancenetwork WHERE instanceID = ?;", bind(instanceID.CStr());
+
+        if (statement.execute() == 0) {
+            return AOS_ERROR_WRAP(ErrorEnum::eNotFound);
+        }
+    } catch (const std::exception& e) {
+        return AOS_ERROR_WRAP(common::utils::ToAosError(e));
+    }
+
+    return ErrorEnum::eNone;
+}
+
+Error Database::GetInstanceNetworksInfo(Array<sm::networkmanager::InstanceNetworkInfo>& networks) const
+{
+    LOG_DBG() << "Get all instance networks";
+
+    try {
+        std::vector<std::pair<std::string, std::string>> result;
+
+        *mSession << "SELECT instanceID, networkID FROM instancenetwork", into(result), now;
+
+        for (const auto& [instanceID, networkID] : result) {
+            if (auto err = networks.EmplaceBack(instanceID.c_str(), networkID.c_str()); !err.IsNone()) {
+                LOG_WRN() << "Failed to add instance network info" << Log::Field("instanceID", instanceID.c_str())
+                          << Log::Field("networkID", networkID.c_str()) << Log::Field(err);
+                return AOS_ERROR_WRAP(Error(err, "db instance networks count exceeds application limit"));
+            }
+        }
+    } catch (const std::exception& e) {
+        LOG_WRN() << "Failed to get instance networks info" << Log::Field(common::utils::ToAosError(e));
         return AOS_ERROR_WRAP(common::utils::ToAosError(e));
     }
 

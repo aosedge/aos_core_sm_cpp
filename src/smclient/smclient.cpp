@@ -168,6 +168,7 @@ Error SMClient::SendMonitoringData(const monitoring::NodeMonitoringData& monitor
     LOG_INF() << "Send monitoring data";
 
     smproto::SMOutgoingMessages outgoingMessage;
+
     *outgoingMessage.mutable_instant_monitoring() = common::pbconvert::ConvertToProtoInstantMonitoring(monitoringData);
 
     if (!mStream || !mStream->Write(outgoingMessage)) {
@@ -185,6 +186,7 @@ Error SMClient::SendAlert(const cloudprotocol::AlertVariant& alert)
     LOG_DBG() << "Send alert: alert=" << alert;
 
     smproto::SMOutgoingMessages outgoingMessage;
+
     *outgoingMessage.mutable_alert() = common::pbconvert::ConvertToProto(alert);
 
     if (!mStream || !mStream->Write(outgoingMessage)) {
@@ -200,7 +202,8 @@ Error SMClient::OnLogReceived(const cloudprotocol::PushLog& log)
 
     LOG_INF() << "Send log";
 
-    auto outgoingMessage            = std::make_unique<smproto::SMOutgoingMessages>();
+    auto outgoingMessage = std::make_unique<smproto::SMOutgoingMessages>();
+
     *outgoingMessage->mutable_log() = common::pbconvert::ConvertToProto(log);
 
     if (!mStream || !mStream->Write(*outgoingMessage)) {
@@ -395,7 +398,8 @@ void SMClient::ConnectionLoop() noexcept
 
         std::unique_lock lock {mMutex};
 
-        mStoppedCV.wait_for(lock, mConfig.mCMReconnectTimeout, [this] { return mStopped; });
+        mStoppedCV.wait_for(
+            lock, std::chrono::nanoseconds(mConfig.mCMReconnectTimeout.Nanoseconds()), [this] { return mStopped; });
 
         if (mStopped) {
             break;
@@ -436,7 +440,7 @@ void SMClient::HandleIncomingMessages() noexcept
             } else if (incomingMsg.has_connection_status()) {
                 ok = ProcessConnectionStatus(incomingMsg.connection_status());
             } else {
-                AOS_ERROR_CHECK_AND_THROW("not supported request type", ErrorEnum::eNotSupported);
+                AOS_ERROR_CHECK_AND_THROW(ErrorEnum::eNotSupported, "not supported request type");
             }
 
             if (!ok) {
@@ -583,14 +587,14 @@ bool SMClient::ProcessGetSystemLogRequest(const smproto::SystemLogRequest& reque
 {
     LOG_INF() << "Process get system log request: logID=" << request.log_id().c_str();
 
-    aos::cloudprotocol::RequestLog logRequest;
+    auto logRequest = std::make_unique<aos::cloudprotocol::RequestLog>();
 
-    if (auto err = common::pbconvert::ConvertToAos(request, logRequest); !err.IsNone()) {
+    if (auto err = common::pbconvert::ConvertToAos(request, *logRequest); !err.IsNone()) {
         LOG_ERR() << "Failed converting system log request: err=" << err;
         return false;
     }
 
-    if (auto err = mLogProvider->GetSystemLog(logRequest); !err.IsNone()) {
+    if (auto err = mLogProvider->GetSystemLog(*logRequest); !err.IsNone()) {
         LOG_ERR() << "Get system log failed: err=" << err;
         return false;
     }
@@ -602,14 +606,14 @@ bool SMClient::ProcessGetInstanceLogRequest(const smproto::InstanceLogRequest& r
 {
     LOG_INF() << "Process get instance log request: logID=" << request.log_id().c_str();
 
-    aos::cloudprotocol::RequestLog logRequest;
+    auto logRequest = std::make_unique<aos::cloudprotocol::RequestLog>();
 
-    if (auto err = common::pbconvert::ConvertToAos(request, logRequest); !err.IsNone()) {
+    if (auto err = common::pbconvert::ConvertToAos(request, *logRequest); !err.IsNone()) {
         LOG_ERR() << "Failed converting instance log request: err=" << err;
         return false;
     }
 
-    if (auto err = mLogProvider->GetInstanceLog(logRequest); !err.IsNone()) {
+    if (auto err = mLogProvider->GetInstanceLog(*logRequest); !err.IsNone()) {
         LOG_ERR() << "Get instance log failed: err=" << err;
         return false;
     }
@@ -621,14 +625,14 @@ bool SMClient::ProcessGetInstanceCrashLogRequest(const smproto::InstanceCrashLog
 {
     LOG_INF() << "Process get instance crash log request: logID=" << request.log_id().c_str();
 
-    aos::cloudprotocol::RequestLog logRequest;
+    auto logRequest = std::make_unique<aos::cloudprotocol::RequestLog>();
 
-    if (auto err = common::pbconvert::ConvertToAos(request, logRequest); !err.IsNone()) {
+    if (auto err = common::pbconvert::ConvertToAos(request, *logRequest); !err.IsNone()) {
         LOG_ERR() << "Failed converting instance crash log request: err=" << err;
         return false;
     }
 
-    if (auto err = mLogProvider->GetInstanceCrashLog(logRequest); !err.IsNone()) {
+    if (auto err = mLogProvider->GetInstanceCrashLog(*logRequest); !err.IsNone()) {
         LOG_ERR() << "Get instance crash log failed: err=" << err;
         return false;
     }

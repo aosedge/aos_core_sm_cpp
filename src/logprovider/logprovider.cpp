@@ -21,7 +21,7 @@ namespace aos::sm::logprovider {
  * Public
  **********************************************************************************************************************/
 
-Error LogProvider::Init(const config::LoggingConfig& config, InstanceIDProviderItf& instanceProvider)
+Error LogProvider::Init(const common::logprovider::Config& config, InstanceIDProviderItf& instanceProvider)
 {
     LOG_DBG() << "Init log provider";
 
@@ -149,9 +149,9 @@ Error LogProvider::Unsubscribe(LogObserverItf& observer)
  * Private
  **********************************************************************************************************************/
 
-std::shared_ptr<Archivator> LogProvider::CreateArchivator()
+std::shared_ptr<common::logprovider::Archivator> LogProvider::CreateArchivator()
 {
-    return std::make_shared<Archivator>(*mLogReceiver, mConfig);
+    return std::make_shared<common::logprovider::Archivator>(*mLogReceiver, mConfig);
 }
 
 std::shared_ptr<utils::JournalItf> LogProvider::CreateJournal()
@@ -239,7 +239,7 @@ void LogProvider::GetLog(const std::vector<std::string>& instanceIDs,
 
     ProcessJournalLogs(*journal, till, needUnitField, *archivator);
 
-    AOS_ERROR_CHECK_AND_THROW("sending log failed", archivator->SendLog(logID));
+    AOS_ERROR_CHECK_AND_THROW(archivator->SendLog(logID), "sending log failed");
 }
 
 void LogProvider::GetInstanceCrashLog(const std::vector<std::string>& instanceIDs,
@@ -275,7 +275,7 @@ void LogProvider::GetInstanceCrashLog(const std::vector<std::string>& instanceID
 
     ProcessJournalCrashLogs(*journal, crashTime, instanceIDs, *archivator);
 
-    AOS_ERROR_CHECK_AND_THROW("sending log failed", archivator->SendLog(logID));
+    AOS_ERROR_CHECK_AND_THROW(archivator->SendLog(logID), "sending log failed");
 }
 
 void LogProvider::SendErrorResponse(const String& logID, const std::string& errorMsg)
@@ -348,7 +348,7 @@ void LogProvider::SeekToTime(utils::JournalItf& journal, const Optional<Time>& f
 }
 
 void LogProvider::ProcessJournalLogs(
-    utils::JournalItf& journal, Optional<Time> till, bool needUnitField, Archivator& archivator)
+    utils::JournalItf& journal, Optional<Time> till, bool needUnitField, common::logprovider::Archivator& archivator)
 {
     while (journal.Next()) {
         auto entry = journal.GetEntry();
@@ -359,12 +359,12 @@ void LogProvider::ProcessJournalLogs(
 
         auto log = FormatLogEntry(entry, needUnitField);
 
-        AOS_ERROR_CHECK_AND_THROW("adding log failed", archivator.AddLog(log));
+        AOS_ERROR_CHECK_AND_THROW(archivator.AddLog(log), "adding log failed");
     }
 }
 
-void LogProvider::ProcessJournalCrashLogs(
-    utils::JournalItf& journal, Time crashTime, const std::vector<std::string>& instanceIDs, Archivator& archivator)
+void LogProvider::ProcessJournalCrashLogs(utils::JournalItf& journal, Time crashTime,
+    const std::vector<std::string>& instanceIDs, common::logprovider::Archivator& archivator)
 {
     while (journal.Next()) {
         auto entry = journal.GetEntry();
@@ -380,7 +380,7 @@ void LogProvider::ProcessJournalCrashLogs(
             if (unitNameInLog.find(unitName) != std::string::npos) {
                 auto log = FormatLogEntry(entry, false);
 
-                AOS_ERROR_CHECK_AND_THROW("adding log failed", archivator.AddLog(log));
+                AOS_ERROR_CHECK_AND_THROW(archivator.AddLog(log), "adding log failed");
                 break;
             }
         }
@@ -390,7 +390,7 @@ void LogProvider::ProcessJournalCrashLogs(
 std::string LogProvider::FormatLogEntry(const utils::JournalEntry& journalEntry, bool addUnit)
 {
     auto [logEntryTimeStr, err] = crypto::asn1::ConvertTimeToASN1Str(journalEntry.mRealTime);
-    AOS_ERROR_CHECK_AND_THROW("time formatting failed", err);
+    AOS_ERROR_CHECK_AND_THROW(err, "time formatting failed");
 
     std::ostringstream oss;
 

@@ -13,6 +13,7 @@
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
+#include <unistd.h>
 
 #include <utils/exception.hpp>
 #include <utils/retry.hpp>
@@ -37,7 +38,7 @@ constexpr auto cFilePermissions
 constexpr auto cStatePermissions = fs::perms::owner_read | fs::perms::owner_write;
 
 constexpr auto cMountRetryCount = 3;
-constexpr auto cMountretryDelay = std::chrono::seconds(1);
+constexpr auto cMountretryDelay = Time::cSeconds;
 
 /***********************************************************************************************************************
  * Static
@@ -94,14 +95,14 @@ void MountDir(const fs::path& source, const fs::path& mountPoint, const std::str
 
     auto err = common::utils::Retry(
         [&]() { return mount(source.c_str(), mountPoint.c_str(), fsType.c_str(), flags, opts.c_str()); },
-        [&]([[maybe_unused]] int retryCount, [[maybe_unused]] common::utils::Duration delay, const aos::Error& err) {
+        [&]([[maybe_unused]] int retryCount, [[maybe_unused]] Duration delay, const aos::Error& err) {
             LOG_WRN() << "Mount error: err=" << err << ", try remount...";
 
             sync();
             umount2(mountPoint.c_str(), MNT_FORCE);
         },
-        cMountRetryCount, cMountretryDelay, std::chrono::seconds::zero());
-    AOS_ERROR_CHECK_AND_THROW("can't mount dir", err);
+        cMountRetryCount, cMountretryDelay, Duration(0));
+    AOS_ERROR_CHECK_AND_THROW(err, "can't mount dir");
 }
 
 void MountOverlay(const fs::path& mountPoint, const std::vector<fs::path>& lowerDirs, const fs::path& workDir,
@@ -119,7 +120,7 @@ void MountOverlay(const fs::path& mountPoint, const std::vector<fs::path>& lower
 
     if (!upperDir.empty()) {
         if (workDir.empty()) {
-            AOS_ERROR_THROW("working dir path should be set", ErrorEnum::eRuntime);
+            AOS_ERROR_THROW(ErrorEnum::eRuntime, "working dir path should be set");
         }
 
         fs::remove_all(workDir);
@@ -142,13 +143,13 @@ void UmountDir(const fs::path& mountPoint)
             sync();
             return umount(mountPoint.c_str());
         },
-        [&]([[maybe_unused]] int retryCount, [[maybe_unused]] common::utils::Duration delay, const aos::Error& err) {
+        [&]([[maybe_unused]] int retryCount, [[maybe_unused]] Duration delay, const aos::Error& err) {
             LOG_WRN() << "Umount error: err=" << err << ", retry...";
 
             umount2(mountPoint.c_str(), MNT_FORCE);
         },
-        cMountRetryCount, cMountretryDelay, std::chrono::seconds::zero());
-    AOS_ERROR_CHECK_AND_THROW("can't umount dir", err);
+        cMountRetryCount, cMountretryDelay, Duration(0));
+    AOS_ERROR_CHECK_AND_THROW(err, "can't umount dir");
 }
 
 oci::LinuxDevice DeviceFromPath(const fs::path& path)
@@ -162,7 +163,7 @@ oci::LinuxDevice DeviceFromPath(const fs::path& path)
     struct stat sb;
 
     auto ret = lstat(devPath.c_str(), &sb);
-    AOS_ERROR_CHECK_AND_THROW("can't get device stat", ret);
+    AOS_ERROR_CHECK_AND_THROW(ret, "can't get device stat");
 
     StaticString<oci::cDeviceTypeLen> type;
 
@@ -180,7 +181,7 @@ oci::LinuxDevice DeviceFromPath(const fs::path& path)
         break;
 
     default:
-        AOS_ERROR_THROW("unsupported device type", ErrorEnum::eRuntime);
+        AOS_ERROR_THROW(ErrorEnum::eRuntime, "unsupported device type");
     }
 
     return oci::LinuxDevice {
@@ -294,7 +295,7 @@ Error Runtime::PrepareServiceStorage(const String& path, uint32_t uid, uint32_t 
         fs::create_directories(storagePath);
 
         auto ret = chown(storagePath.c_str(), uid, gid);
-        AOS_ERROR_CHECK_AND_THROW("can't chown storage", ret);
+        AOS_ERROR_CHECK_AND_THROW(ret, "can't chown storage");
 
     } catch (const std::exception& e) {
         return AOS_ERROR_WRAP(common::utils::ToAosError(e, ErrorEnum::eRuntime));
@@ -321,7 +322,7 @@ Error Runtime::PrepareServiceState(const String& path, uint32_t uid, uint32_t gi
         fs::permissions(statePath, cStatePermissions);
 
         auto ret = chown(statePath.c_str(), uid, gid);
-        AOS_ERROR_CHECK_AND_THROW("can't chown state", ret);
+        AOS_ERROR_CHECK_AND_THROW(ret, "can't chown state");
     } catch (const std::exception& e) {
         return AOS_ERROR_WRAP(common::utils::ToAosError(e, ErrorEnum::eRuntime));
     }
@@ -371,7 +372,7 @@ Error Runtime::PopulateHostDevices(const String& devicePath, Array<oci::LinuxDev
 
         if (!fs::is_directory(devPath)) {
             auto err = devices.PushBack(DeviceFromPath(devPath));
-            AOS_ERROR_CHECK_AND_THROW("can't populate host devices", err);
+            AOS_ERROR_CHECK_AND_THROW(err, "can't populate host devices");
         } else {
             for (const auto& entry : fs::recursive_directory_iterator(devPath,
                      fs::directory_options::follow_directory_symlink | fs::directory_options::skip_permission_denied)) {
