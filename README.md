@@ -4,6 +4,8 @@
 
 # Aos Service Manager
 
+**IMPORTANT**: this repo is archived and moved to https://github.com/aosedge/aos_core_cpp.
+
 Aos Service Manager (SM) is a part of Aos system which resides on the device side and stands for the following tasks:
 
 * communicate with the communication manager;
