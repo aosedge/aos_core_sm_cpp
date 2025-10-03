@@ -24,4 +24,4 @@ gtest_discover_tests(${TARGET})
 # Libraries
 # ######################################################################################################################
 
-target_link_libraries(${TARGET} resourcemanager GTest::gmock_main)
+target_link_libraries(${TARGET} resourcemanager aostestutils GTest::gmock_main)
