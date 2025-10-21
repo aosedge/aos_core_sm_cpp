@@ -2,17 +2,17 @@
 [![codecov](https://codecov.io/gh/aosedge/aos_core_sm_cpp/graph/badge.svg?token=MknkthRkpf)](https://codecov.io/gh/aosedge/aos_core_sm_cpp)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=aosedge_aos_core_sm_cpp&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=aosedge_aos_core_sm_cpp)
 
-# Aos Service Manager
+# AosCore Service Manager
 
 **IMPORTANT**: this repo is archived and moved to https://github.com/aosedge/aos_core_cpp.
 
-Aos Service Manager (SM) is a part of Aos system which resides on the device side and stands for the following tasks:
+AosCore Service Manager (SM) is a part of AosCore system which resides on the device side and stands for the following tasks:
 
 * communicate with the communication manager;
-* install, remove, start, stop Aos services;
-* configure Aos services network;
-* configure and monitor Aos services and system resource usage;
-* provide persistent storage and state handling for Aos services.
+* install, remove, start, stop AosCore services;
+* configure AosCore services network;
+* configure and monitor AosCore services and system resource usage;
+* provide persistent storage and state handling for AosCore services.
 
 See architecture [document](https://docs.aosedge.tech/docs/aos-core/sm/) for more details.
 
