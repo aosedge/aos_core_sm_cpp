@@ -157,7 +157,12 @@ oci::LinuxDevice DeviceFromPath(const fs::path& path)
     auto devPath = path;
 
     if (fs::is_symlink(path)) {
-        devPath = fs::read_symlink(path);
+        auto target = fs::read_symlink(path);
+        if (target.is_relative()) {
+            devPath = (path.parent_path() / target).lexically_normal();
+        } else {
+            devPath = target;
+        }
     }
 
     struct stat sb;
@@ -185,7 +190,7 @@ oci::LinuxDevice DeviceFromPath(const fs::path& path)
     }
 
     return oci::LinuxDevice {
-        devPath.c_str(), type, major(sb.st_rdev), minor(sb.st_rdev), sb.st_mode & ~S_IFMT, sb.st_uid, sb.st_gid};
+        path.c_str(), type, major(sb.st_rdev), minor(sb.st_rdev), sb.st_mode & ~S_IFMT, sb.st_uid, sb.st_gid};
 }
 
 } // namespace

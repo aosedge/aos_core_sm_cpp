@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include <aos/test/log.hpp>
+#include <aos/test/utils.hpp>
 
 #include "resourcemanager/resourcemanager.hpp"
 
@@ -29,7 +30,11 @@ TEST_F(ResourcemanagerTest, CheckDevice)
 {
     ASSERT_TRUE(mHostDeviceManager.Init().IsNone());
 
-    EXPECT_TRUE(mHostDeviceManager.CheckDevice("/dev/null").IsNone());
+    auto err = mHostDeviceManager.CheckDevice("/dev/null");
+    EXPECT_TRUE(err.IsNone()) << test::ErrorToStr(err);
+
+    err = mHostDeviceManager.CheckDevice("/dev/null:/dev/test");
+    EXPECT_TRUE(err.IsNone()) << test::ErrorToStr(err);
 }
 
 TEST_F(ResourcemanagerTest, CheckDeviceReturnsNotFound)
